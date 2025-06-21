@@ -1,0 +1,3 @@
+[mysqld]
+# add config
+skip-name-resolve=0
