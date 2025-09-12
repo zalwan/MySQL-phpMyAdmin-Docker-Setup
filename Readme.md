@@ -39,8 +39,8 @@ mysql-docker-setup/
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/your-username/mysql-docker-setup.git
-cd mysql-docker-setup
+git clone https://github.com/zalwan/MySQL-phpMyAdmin-Docker-Setup.git
+cd MySQL-phpMyAdmin-Docker-Setup
 ```
 
 ### 2. Configure Environment Variables
