@@ -1,6 +1,8 @@
 <?php
 $records = [];
 $errorMessage = '';
+$successMessage = '';
+$editingRecord = null;
 
 ob_start();
 require __DIR__ . '/connection.php';
@@ -9,6 +11,70 @@ ob_end_clean();
 if (!$conn) {
   $errorMessage = 'Tidak dapat terhubung ke database.';
 } else {
+  if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = $_POST['action'] ?? '';
+    if ($action === 'delete') {
+      $id = (int)($_POST['id'] ?? 0);
+      if ($id <= 0) {
+        $errorMessage = 'ID tidak valid untuk dihapus.';
+      } else {
+        $stmt = mysqli_prepare($conn, "DELETE FROM mahasiswa WHERE id = ?");
+        if ($stmt) {
+          mysqli_stmt_bind_param($stmt, 'i', $id);
+          if (mysqli_stmt_execute($stmt)) {
+            $successMessage = 'Data mahasiswa berhasil dihapus.';
+          } else {
+            $errorMessage = 'Gagal menghapus data: ' . htmlspecialchars(mysqli_error($conn));
+          }
+          mysqli_stmt_close($stmt);
+        } else {
+          $errorMessage = 'Gagal mempersiapkan query hapus.';
+        }
+      }
+    } elseif ($action === 'update') {
+      $id = (int)($_POST['id'] ?? 0);
+      $nama = trim($_POST['nama'] ?? '');
+      $nim = trim($_POST['nim'] ?? '');
+      $prodi = trim($_POST['prodi'] ?? '');
+
+      if ($id <= 0 || $nama === '' || $nim === '' || $prodi === '') {
+        $errorMessage = 'Semua kolom wajib diisi untuk pembaruan.';
+        $editingRecord = ['id' => $id, 'nama' => $nama, 'nim' => $nim, 'prodi' => $prodi];
+      } else {
+        $stmt = mysqli_prepare($conn, "UPDATE mahasiswa SET nama = ?, nim = ?, prodi = ? WHERE id = ?");
+        if ($stmt) {
+          mysqli_stmt_bind_param($stmt, 'sssi', $nama, $nim, $prodi, $id);
+          if (mysqli_stmt_execute($stmt)) {
+            $successMessage = 'Data mahasiswa berhasil diperbarui.';
+          } else {
+            $errorMessage = 'Gagal memperbarui data: ' . htmlspecialchars(mysqli_error($conn));
+            $editingRecord = ['id' => $id, 'nama' => $nama, 'nim' => $nim, 'prodi' => $prodi];
+          }
+          mysqli_stmt_close($stmt);
+        } else {
+          $errorMessage = 'Gagal mempersiapkan query update.';
+          $editingRecord = ['id' => $id, 'nama' => $nama, 'nim' => $nim, 'prodi' => $prodi];
+        }
+      }
+    }
+  }
+
+  if (!$errorMessage && isset($_GET['edit'])) {
+    $editId = (int)$_GET['edit'];
+    if ($editId > 0) {
+      $stmt = mysqli_prepare($conn, "SELECT id, nama, nim, prodi FROM mahasiswa WHERE id = ?");
+      if ($stmt) {
+        mysqli_stmt_bind_param($stmt, 'i', $editId);
+        if (mysqli_stmt_execute($stmt)) {
+          $result = mysqli_stmt_get_result($stmt);
+          $editingRecord = mysqli_fetch_assoc($result) ?: null;
+          mysqli_free_result($result);
+        }
+        mysqli_stmt_close($stmt);
+      }
+    }
+  }
+
   $result = mysqli_query($conn, "SELECT id, nama, nim, prodi FROM mahasiswa ORDER BY id DESC");
   if ($result) {
     while ($row = mysqli_fetch_assoc($result)) {
@@ -18,6 +84,7 @@ if (!$conn) {
   } else {
     $errorMessage = 'Gagal mengambil data: ' . htmlspecialchars(mysqli_error($conn));
   }
+
   mysqli_close($conn);
 }
 ?>
@@ -136,6 +203,91 @@ if (!$conn) {
       color: #0f172a;
       box-shadow: 0 12px 30px rgba(251, 191, 36, 0.35);
     }
+
+    .alert.success {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.5);
+      color: #34d399;
+    }
+
+    .actions-cell {
+      display: flex;
+      gap: 0.35rem;
+    }
+
+    .actions-cell form {
+      margin: 0;
+    }
+
+    .badge-btn {
+      padding: 0.35rem 0.85rem;
+      border-radius: 999px;
+      border: none;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .badge-btn.edit {
+      background: rgba(59, 130, 246, 0.2);
+      color: #93c5fd;
+      border: 1px solid rgba(59, 130, 246, 0.4);
+      text-decoration: none;
+      display: inline-block;
+    }
+
+    .badge-btn.delete {
+      background: rgba(239, 68, 68, 0.2);
+      color: #fca5a5;
+      border: 1px solid rgba(239, 68, 68, 0.4);
+    }
+
+    .edit-card {
+      margin-top: 2rem;
+      padding: 2rem;
+      border-radius: 20px;
+      background: rgba(15, 23, 42, 0.75);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+    }
+
+    .edit-card h2 {
+      margin-top: 0;
+      margin-bottom: 1rem;
+    }
+
+    .edit-card label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 0.3rem;
+    }
+
+    .edit-card input {
+      width: 100%;
+      padding: 0.8rem 1rem;
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      background: rgba(15, 23, 42, 0.6);
+      color: #f8fafc;
+      margin-bottom: 1.1rem;
+    }
+
+    .edit-card input:focus {
+      outline: none;
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25);
+    }
+
+    .edit-card button {
+      width: 100%;
+      padding: 0.9rem;
+      border-radius: 999px;
+      border: none;
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+      background: linear-gradient(120deg, #22d3ee, #6366f1);
+      color: #0f172a;
+    }
   </style>
 </head>
 
@@ -143,6 +295,10 @@ if (!$conn) {
   <div class="wrapper">
     <h1>Data Mahasiswa</h1>
     <p class="subtitle">Daftar mahasiswa dari tabel <code>mahasiswa</code>.</p>
+
+    <?php if ($successMessage): ?>
+      <div class="alert success"><?php echo htmlspecialchars($successMessage); ?></div>
+    <?php endif; ?>
 
     <?php if ($errorMessage): ?>
       <div class="alert error"><?php echo htmlspecialchars($errorMessage); ?></div>
@@ -161,6 +317,7 @@ if (!$conn) {
             <th>Nama</th>
             <th>NIM</th>
             <th>Program Studi</th>
+            <th>Aksi</th>
           </tr>
         </thead>
         <tbody>
@@ -170,6 +327,14 @@ if (!$conn) {
               <td><?php echo htmlspecialchars($row['nama']); ?></td>
               <td><?php echo htmlspecialchars($row['nim']); ?></td>
               <td><?php echo htmlspecialchars($row['prodi']); ?></td>
+              <td class="actions-cell">
+                <a class="badge-btn edit" href="?edit=<?php echo urlencode($row['id']); ?>">Edit</a>
+                <form method="POST" onsubmit="return confirm('Yakin ingin menghapus data ini?');">
+                  <input type="hidden" name="action" value="delete">
+                  <input type="hidden" name="id" value="<?php echo htmlspecialchars($row['id']); ?>">
+                  <button type="submit" class="badge-btn delete">Hapus</button>
+                </form>
+              </td>
             </tr>
           <?php endforeach; ?>
         </tbody>
@@ -180,6 +345,27 @@ if (!$conn) {
       <a href="form-input.php">Tambah Data</a>
       <a class="secondary" href="index.php">Kembali ke Viewer</a>
     </div>
+
+    <?php if ($editingRecord): ?>
+      <div class="edit-card">
+        <h2>Edit Data Mahasiswa</h2>
+        <form method="POST">
+          <input type="hidden" name="action" value="update">
+          <input type="hidden" name="id" value="<?php echo htmlspecialchars($editingRecord['id']); ?>">
+
+          <label for="nama">Nama Lengkap</label>
+          <input type="text" id="nama" name="nama" required value="<?php echo htmlspecialchars($editingRecord['nama']); ?>">
+
+          <label for="nim">NIM</label>
+          <input type="text" id="nim" name="nim" required value="<?php echo htmlspecialchars($editingRecord['nim']); ?>">
+
+          <label for="prodi">Program Studi</label>
+          <input type="text" id="prodi" name="prodi" required value="<?php echo htmlspecialchars($editingRecord['prodi']); ?>">
+
+          <button type="submit">Simpan Perubahan</button>
+        </form>
+      </div>
+    <?php endif; ?>
   </div>
 </body>
 
