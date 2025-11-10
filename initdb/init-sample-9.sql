@@ -83,9 +83,8 @@ FROM
 
 -- Menampilkan semua petugas, termasuk yang belum mengelola data apapun
 SELECT
-  petugas.*,
-  kdkelola,
-  jnskelola
+  kelola_pengarang.*,
+  no_hp
 FROM
   petugas
   LEFT JOIN kelola_pengarang ON kelola_pengarang.idpetugas = petugas.idpetugas;
@@ -119,10 +118,10 @@ FROM
 -- Menampilkan pengelolaan pengarang beserta judul buku yang ditulis
 SELECT
   kelola_pengarang.kdkelola,
-  petugas.nama AS 'petugas',
-  pengarang.nama AS 'pengarang',
-  buku.judul AS 'buku',
-  jnskelola,
+  petugas.nama AS 'nama petugas',
+  pengarang.nama AS 'nama pengarang',
+  --   buku.judul AS 'buku',
+  jnskelola AS 'jenis pengelaolan',
   tanggal,
   waktu
 FROM
