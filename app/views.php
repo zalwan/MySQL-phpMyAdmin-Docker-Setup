@@ -3,6 +3,7 @@ $records = [];
 $errorMessage = '';
 $successMessage = '';
 $editingRecord = null;
+$searchTerm = trim($_GET['q'] ?? '');
 
 ob_start();
 require __DIR__ . '/connection.php';
@@ -75,14 +76,39 @@ if (!$conn) {
     }
   }
 
-  $result = mysqli_query($conn, "SELECT id, nama, nim, prodi FROM mahasiswa ORDER BY id DESC");
-  if ($result) {
-    while ($row = mysqli_fetch_assoc($result)) {
-      $records[] = $row;
+  if ($searchTerm !== '') {
+    $stmt = mysqli_prepare(
+      $conn,
+      "SELECT id, nama, nim, prodi FROM mahasiswa
+       WHERE nama LIKE ? OR nim LIKE ? OR prodi LIKE ?
+       ORDER BY id DESC"
+    );
+    if ($stmt) {
+      $likeTerm = '%' . $searchTerm . '%';
+      mysqli_stmt_bind_param($stmt, 'sss', $likeTerm, $likeTerm, $likeTerm);
+      if (mysqli_stmt_execute($stmt)) {
+        $result = mysqli_stmt_get_result($stmt);
+        while ($row = mysqli_fetch_assoc($result)) {
+          $records[] = $row;
+        }
+        mysqli_free_result($result);
+      } elseif (!$errorMessage) {
+        $errorMessage = 'Gagal menjalankan pencarian: ' . htmlspecialchars(mysqli_error($conn));
+      }
+      mysqli_stmt_close($stmt);
+    } elseif (!$errorMessage) {
+      $errorMessage = 'Gagal menyiapkan query pencarian.';
     }
-    mysqli_free_result($result);
   } else {
-    $errorMessage = 'Gagal mengambil data: ' . htmlspecialchars(mysqli_error($conn));
+    $result = mysqli_query($conn, "SELECT id, nama, nim, prodi FROM mahasiswa ORDER BY id DESC");
+    if ($result) {
+      while ($row = mysqli_fetch_assoc($result)) {
+        $records[] = $row;
+      }
+      mysqli_free_result($result);
+    } elseif (!$errorMessage) {
+      $errorMessage = 'Gagal mengambil data: ' . htmlspecialchars(mysqli_error($conn));
+    }
   }
 
   mysqli_close($conn);
@@ -204,6 +230,57 @@ if (!$conn) {
       box-shadow: 0 12px 30px rgba(251, 191, 36, 0.35);
     }
 
+    .search-bar {
+      display: flex;
+      gap: 0.75rem;
+      margin: 1.5rem 0;
+      flex-wrap: wrap;
+    }
+
+    .search-bar input {
+      flex: 1;
+      min-width: 220px;
+      padding: 0.8rem 1rem;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      background: rgba(15, 23, 42, 0.7);
+      color: #f8fafc;
+    }
+
+    .search-bar input:focus {
+      outline: none;
+      border-color: #22d3ee;
+      box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.2);
+    }
+
+    .search-bar button,
+    .search-bar a.reset-search {
+      padding: 0.8rem 1.6rem;
+      border-radius: 999px;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .search-bar button {
+      background: linear-gradient(120deg, #22d3ee, #6366f1);
+      color: #0f172a;
+    }
+
+    .search-bar a.reset-search {
+      background: rgba(148, 163, 184, 0.15);
+      color: #e2e8f0;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+    }
+
+    .search-bar button:hover,
+    .search-bar a.reset-search:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 12px 24px rgba(15, 23, 42, 0.3);
+    }
+
     .alert.success {
       background: rgba(16, 185, 129, 0.15);
       border: 1px solid rgba(16, 185, 129, 0.5);
@@ -304,10 +381,23 @@ if (!$conn) {
       <div class="alert error"><?php echo htmlspecialchars($errorMessage); ?></div>
     <?php endif; ?>
 
+    <form class="search-bar" method="GET">
+      <input type="text" name="q" placeholder="Cari nama, NIM, atau prodi..." value="<?php echo htmlspecialchars($searchTerm); ?>">
+      <button type="submit">Cari</button>
+      <?php if ($searchTerm !== ''): ?>
+        <a class="reset-search" href="<?php echo htmlspecialchars($_SERVER['PHP_SELF']); ?>">Reset</a>
+      <?php endif; ?>
+    </form>
+
     <?php if (!$errorMessage && empty($records)): ?>
       <div class="empty-state">
-        <h2>Belum ada data.</h2>
-        <p>Silakan tambahkan data mahasiswa terlebih dahulu.</p>
+        <?php if ($searchTerm !== ''): ?>
+          <h2>Tidak ada hasil.</h2>
+          <p>Tidak ditemukan data dengan kata kunci "<?php echo htmlspecialchars($searchTerm); ?>".</p>
+        <?php else: ?>
+          <h2>Belum ada data.</h2>
+          <p>Silakan tambahkan data mahasiswa terlebih dahulu.</p>
+        <?php endif; ?>
       </div>
     <?php else: ?>
       <table>
@@ -328,7 +418,7 @@ if (!$conn) {
               <td><?php echo htmlspecialchars($row['nim']); ?></td>
               <td><?php echo htmlspecialchars($row['prodi']); ?></td>
               <td class="actions-cell">
-                <a class="badge-btn edit" href="?edit=<?php echo urlencode($row['id']); ?>">Edit</a>
+                <a class="badge-btn edit" href="?edit=<?php echo urlencode($row['id']); ?><?php echo $searchTerm !== '' ? '&amp;q=' . urlencode($searchTerm) : ''; ?>">Edit</a>
                 <form method="POST" onsubmit="return confirm('Yakin ingin menghapus data ini?');">
                   <input type="hidden" name="action" value="delete">
                   <input type="hidden" name="id" value="<?php echo htmlspecialchars($row['id']); ?>">
