@@ -1,6 +1,8 @@
 <?php
 $successMessage = '';
 $errorMessage = '';
+$uploadedFilePath = '';
+$hasFotoColumn = false;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $nama = trim($_POST['nama'] ?? '');
@@ -9,7 +11,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   if ($nama === '' || $nim === '' || $prodi === '') {
     $errorMessage = 'Semua kolom wajib diisi.';
-  } else {
+  }
+
+  // Handle file upload if a file is provided.
+  if (!$errorMessage) {
+    $uploadDir = __DIR__ . '/uploads';
+    $foto = $_FILES['foto'] ?? null;
+    $hasFoto = $foto && $foto['error'] !== UPLOAD_ERR_NO_FILE;
+
+    if ($hasFoto) {
+      if ($foto['error'] !== UPLOAD_ERR_OK) {
+        $errorMessage = 'Gagal mengunggah file. Silakan coba lagi.';
+      } else {
+        $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif'];
+        $allowedMimeTypes = ['image/jpeg', 'image/png', 'image/gif'];
+        $maxSize = 2 * 1024 * 1024; // 2 MB
+        $fileSize = $foto['size'] ?? 0;
+        $originalName = $foto['name'] ?? '';
+        $fileExtension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+
+        $finfo = function_exists('finfo_open') ? finfo_open(FILEINFO_MIME_TYPE) : false;
+        $mimeType = $finfo ? finfo_file($finfo, $foto['tmp_name']) : ($foto['type'] ?? '');
+        if ($finfo) {
+          finfo_close($finfo);
+        }
+
+        if (!in_array($fileExtension, $allowedExtensions, true) || !in_array($mimeType, $allowedMimeTypes, true)) {
+          $errorMessage = 'File harus berupa gambar (JPG, JPEG, PNG, atau GIF).';
+        } elseif ($fileSize > $maxSize) {
+          $errorMessage = 'Ukuran file maksimal 2 MB.';
+        } else {
+          if (!is_dir($uploadDir) && !mkdir($uploadDir, 0755, true)) {
+            $errorMessage = 'Folder upload tidak dapat dibuat.';
+          } else {
+            $uniqueName = uniqid('foto_', true) . '.' . $fileExtension;
+            $targetPath = $uploadDir . '/' . $uniqueName;
+
+            if (move_uploaded_file($foto['tmp_name'], $targetPath)) {
+              $uploadedFilePath = '/uploads/' . $uniqueName;
+            } else {
+              $errorMessage = 'Gagal memindahkan file upload.';
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (!$errorMessage) {
     ob_start();
     require __DIR__ . '/connection.php';
     ob_end_clean();
@@ -17,11 +66,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$conn) {
       $errorMessage = 'Gagal terhubung ke database.';
     } else {
-      $stmt = mysqli_prepare($conn, "INSERT INTO mahasiswa (nama, nim, prodi) VALUES (?, ?, ?)");
+      $columnCheck = mysqli_query($conn, "SHOW COLUMNS FROM mahasiswa LIKE 'foto'");
+      if ($columnCheck) {
+        $hasFotoColumn = mysqli_num_rows($columnCheck) > 0;
+        mysqli_free_result($columnCheck);
+      }
+
+      // Auto-create foto column if missing so uploads can be saved.
+      if (!$hasFotoColumn) {
+        $addColumn = mysqli_query($conn, "ALTER TABLE mahasiswa ADD COLUMN foto VARCHAR(255) NULL");
+        if ($addColumn) {
+          $hasFotoColumn = true;
+        }
+      }
+
+      $stmt = $hasFotoColumn
+        ? mysqli_prepare($conn, "INSERT INTO mahasiswa (nama, nim, prodi, foto) VALUES (?, ?, ?, ?)")
+        : mysqli_prepare($conn, "INSERT INTO mahasiswa (nama, nim, prodi) VALUES (?, ?, ?)");
+
       if ($stmt) {
-        mysqli_stmt_bind_param($stmt, 'sss', $nama, $nim, $prodi);
+        if ($hasFotoColumn) {
+          $fotoPathToStore = $uploadedFilePath !== '' ? $uploadedFilePath : null;
+          mysqli_stmt_bind_param($stmt, 'ssss', $nama, $nim, $prodi, $fotoPathToStore);
+        } else {
+          mysqli_stmt_bind_param($stmt, 'sss', $nama, $nim, $prodi);
+        }
+
         if (mysqli_stmt_execute($stmt)) {
-          $successMessage = 'Data mahasiswa berhasil disimpan.';
+          $successMessage = 'Data mahasiswa berhasil disimpan.' . ($uploadedFilePath ? ' Foto berhasil diunggah.' : '');
         } else {
           $errorMessage = 'Gagal menyimpan data: ' . htmlspecialchars(mysqli_error($conn));
         }
@@ -134,6 +206,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       border: 1px solid rgba(248, 113, 113, 0.5);
       color: #fca5a5;
     }
+
+    .file-input {
+      border: 1px dashed rgba(148, 163, 184, 0.6);
+      background: rgba(15, 23, 42, 0.4);
+      cursor: pointer;
+    }
+
+    .file-input::-webkit-file-upload-button {
+      padding: 0.6rem 1rem;
+      border: none;
+      border-radius: 10px;
+      margin-right: 0.75rem;
+      background: rgba(99, 102, 241, 0.25);
+      color: #c7d2fe;
+      cursor: pointer;
+    }
+
+    .preview {
+      margin-top: 1.25rem;
+      padding: 1rem;
+      border-radius: 14px;
+      background: rgba(34, 197, 94, 0.08);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      text-align: center;
+    }
+
+    .preview img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 12px;
+      margin-top: 0.75rem;
+      box-shadow: 0 15px 30px rgba(14, 165, 233, 0.25);
+    }
   </style>
 </head>
 
@@ -150,7 +255,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <div class="alert error"><?php echo htmlspecialchars($errorMessage); ?></div>
     <?php endif; ?>
 
-    <form method="POST" action="">
+    <form method="POST" action="" enctype="multipart/form-data">
       <label for="nama">Nama Lengkap</label>
       <input type="text" id="nama" name="nama" placeholder="Contoh: Siti Rahmawati" required
         value="<?php echo htmlspecialchars($_POST['nama'] ?? ''); ?>">
@@ -163,8 +268,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <input type="text" id="prodi" name="prodi" placeholder="Contoh: Teknik Informatika" required
         value="<?php echo htmlspecialchars($_POST['prodi'] ?? ''); ?>">
 
+      <label for="foto">Foto Mahasiswa</label>
+      <input type="file" id="foto" name="foto" accept="image/*" class="file-input">
+
       <button type="submit">Simpan Data</button>
     </form>
+
+    <?php if ($uploadedFilePath): ?>
+      <div class="preview">
+        <div>Foto berhasil diunggah.</div>
+        <img src="<?php echo htmlspecialchars($uploadedFilePath); ?>" alt="Foto mahasiswa">
+      </div>
+    <?php endif; ?>
   </div>
 </body>
 

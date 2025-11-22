@@ -3,7 +3,9 @@ $records = [];
 $errorMessage = '';
 $successMessage = '';
 $editingRecord = null;
-$searchTerm = trim($_GET['q'] ?? '');
+$searchTerm = trim($_GET['q'] ?? ($_POST['q'] ?? ''));
+$redirectTarget = $_SERVER['PHP_SELF'];
+$hasFotoColumn = false;
 
 ob_start();
 require __DIR__ . '/connection.php';
@@ -12,6 +14,19 @@ ob_end_clean();
 if (!$conn) {
   $errorMessage = 'Tidak dapat terhubung ke database.';
 } else {
+  $columnCheck = mysqli_query($conn, "SHOW COLUMNS FROM mahasiswa LIKE 'foto'");
+  if ($columnCheck) {
+    $hasFotoColumn = mysqli_num_rows($columnCheck) > 0;
+    mysqli_free_result($columnCheck);
+  }
+  if (!$hasFotoColumn) {
+    $addColumn = mysqli_query($conn, "ALTER TABLE mahasiswa ADD COLUMN foto VARCHAR(255) NULL");
+    if ($addColumn) {
+      $hasFotoColumn = true;
+    }
+  }
+  $selectColumns = $hasFotoColumn ? 'id, nama, nim, prodi, foto' : 'id, nama, nim, prodi';
+
   if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     if ($action === 'delete') {
@@ -24,6 +39,11 @@ if (!$conn) {
           mysqli_stmt_bind_param($stmt, 'i', $id);
           if (mysqli_stmt_execute($stmt)) {
             $successMessage = 'Data mahasiswa berhasil dihapus.';
+            if ($searchTerm !== '') {
+              $redirectTarget .= '?q=' . urlencode($searchTerm);
+            }
+            header('Location: ' . $redirectTarget);
+            exit;
           } else {
             $errorMessage = 'Gagal menghapus data: ' . htmlspecialchars(mysqli_error($conn));
           }
@@ -37,6 +57,10 @@ if (!$conn) {
       $nama = trim($_POST['nama'] ?? '');
       $nim = trim($_POST['nim'] ?? '');
       $prodi = trim($_POST['prodi'] ?? '');
+      $searchTermPost = trim($_POST['q'] ?? '');
+      if ($searchTermPost !== '') {
+        $searchTerm = $searchTermPost;
+      }
 
       if ($id <= 0 || $nama === '' || $nim === '' || $prodi === '') {
         $errorMessage = 'Semua kolom wajib diisi untuk pembaruan.';
@@ -47,6 +71,11 @@ if (!$conn) {
           mysqli_stmt_bind_param($stmt, 'sssi', $nama, $nim, $prodi, $id);
           if (mysqli_stmt_execute($stmt)) {
             $successMessage = 'Data mahasiswa berhasil diperbarui.';
+            if ($searchTerm !== '') {
+              $redirectTarget .= '?q=' . urlencode($searchTerm);
+            }
+            header('Location: ' . $redirectTarget);
+            exit;
           } else {
             $errorMessage = 'Gagal memperbarui data: ' . htmlspecialchars(mysqli_error($conn));
             $editingRecord = ['id' => $id, 'nama' => $nama, 'nim' => $nim, 'prodi' => $prodi];
@@ -63,7 +92,7 @@ if (!$conn) {
   if (!$errorMessage && isset($_GET['edit'])) {
     $editId = (int)$_GET['edit'];
     if ($editId > 0) {
-      $stmt = mysqli_prepare($conn, "SELECT id, nama, nim, prodi FROM mahasiswa WHERE id = ?");
+      $stmt = mysqli_prepare($conn, "SELECT $selectColumns FROM mahasiswa WHERE id = ?");
       if ($stmt) {
         mysqli_stmt_bind_param($stmt, 'i', $editId);
         if (mysqli_stmt_execute($stmt)) {
@@ -79,7 +108,7 @@ if (!$conn) {
   if ($searchTerm !== '') {
     $stmt = mysqli_prepare(
       $conn,
-      "SELECT id, nama, nim, prodi FROM mahasiswa
+      "SELECT $selectColumns FROM mahasiswa
        WHERE nama LIKE ? OR nim LIKE ? OR prodi LIKE ?
        ORDER BY id DESC"
     );
@@ -100,7 +129,7 @@ if (!$conn) {
       $errorMessage = 'Gagal menyiapkan query pencarian.';
     }
   } else {
-    $result = mysqli_query($conn, "SELECT id, nama, nim, prodi FROM mahasiswa ORDER BY id DESC");
+    $result = mysqli_query($conn, "SELECT $selectColumns FROM mahasiswa ORDER BY id DESC");
     if ($result) {
       while ($row = mysqli_fetch_assoc($result)) {
         $records[] = $row;
@@ -365,6 +394,20 @@ if (!$conn) {
       background: linear-gradient(120deg, #22d3ee, #6366f1);
       color: #0f172a;
     }
+
+    .foto-cell img {
+      width: 64px;
+      height: 64px;
+      object-fit: cover;
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      background: rgba(15, 23, 42, 0.5);
+    }
+
+    .muted {
+      color: #94a3b8;
+      font-size: 0.9rem;
+    }
   </style>
 </head>
 
@@ -407,6 +450,9 @@ if (!$conn) {
             <th>Nama</th>
             <th>NIM</th>
             <th>Program Studi</th>
+            <?php if ($hasFotoColumn): ?>
+              <th>Foto</th>
+            <?php endif; ?>
             <th>Aksi</th>
           </tr>
         </thead>
@@ -417,11 +463,23 @@ if (!$conn) {
               <td><?php echo htmlspecialchars($row['nama']); ?></td>
               <td><?php echo htmlspecialchars($row['nim']); ?></td>
               <td><?php echo htmlspecialchars($row['prodi']); ?></td>
+              <?php if ($hasFotoColumn): ?>
+                <td class="foto-cell">
+                  <?php if (!empty($row['foto'])): ?>
+                    <img src="<?php echo htmlspecialchars($row['foto']); ?>" alt="Foto <?php echo htmlspecialchars($row['nama']); ?>">
+                  <?php else: ?>
+                    <span class="muted">Tidak ada foto</span>
+                  <?php endif; ?>
+                </td>
+              <?php endif; ?>
               <td class="actions-cell">
-                <a class="badge-btn edit" href="?edit=<?php echo urlencode($row['id']); ?><?php echo $searchTerm !== '' ? '&amp;q=' . urlencode($searchTerm) : ''; ?>">Edit</a>
-                <form method="POST" onsubmit="return confirm('Yakin ingin menghapus data ini?');">
+                <a class="badge-btn edit" href="<?php echo htmlspecialchars($_SERVER['PHP_SELF']); ?>?edit=<?php echo urlencode($row['id']); ?><?php echo $searchTerm !== '' ? '&amp;q=' . urlencode($searchTerm) : ''; ?>">Edit</a>
+                <form method="POST" action="<?php echo htmlspecialchars($_SERVER['PHP_SELF']); ?>" onsubmit="return confirm('Yakin ingin menghapus data ini?');">
                   <input type="hidden" name="action" value="delete">
                   <input type="hidden" name="id" value="<?php echo htmlspecialchars($row['id']); ?>">
+                  <?php if ($searchTerm !== ''): ?>
+                    <input type="hidden" name="q" value="<?php echo htmlspecialchars($searchTerm); ?>">
+                  <?php endif; ?>
                   <button type="submit" class="badge-btn delete">Hapus</button>
                 </form>
               </td>
@@ -439,9 +497,12 @@ if (!$conn) {
     <?php if ($editingRecord): ?>
       <div class="edit-card">
         <h2>Edit Data Mahasiswa</h2>
-        <form method="POST">
+        <form method="POST" action="<?php echo htmlspecialchars($_SERVER['PHP_SELF']); ?>">
           <input type="hidden" name="action" value="update">
           <input type="hidden" name="id" value="<?php echo htmlspecialchars($editingRecord['id']); ?>">
+          <?php if ($searchTerm !== ''): ?>
+            <input type="hidden" name="q" value="<?php echo htmlspecialchars($searchTerm); ?>">
+          <?php endif; ?>
 
           <label for="nama">Nama Lengkap</label>
           <input type="text" id="nama" name="nama" required value="<?php echo htmlspecialchars($editingRecord['nama']); ?>">

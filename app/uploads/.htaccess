@@ -1,0 +1,5 @@
+# Prevent executing scripts inside the uploads directory
+php_flag engine off
+RemoveHandler .php .phtml .php3 .php4 .php5 .php7 .php8
+RemoveType .php .phtml .php3 .php4 .php5 .php7 .php8
+Options -Indexes
