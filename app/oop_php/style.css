@@ -252,6 +252,26 @@ input[type="text"]:focus {
     font-size: 14px;
 }
 
+.notice {
+    border: 1px solid var(--border);
+    background: rgba(102, 217, 237, 0.1);
+    color: var(--text);
+    padding: 12px 14px;
+    border-radius: 12px;
+    margin: 4px 0 12px;
+}
+
+.notice.error {
+    border-color: rgba(255, 115, 115, 0.4);
+    background: rgba(255, 115, 115, 0.12);
+    color: #ffe4e4;
+}
+
+input[readonly] {
+    color: var(--muted);
+    border-style: dashed;
+}
+
 @media (max-width: 720px) {
     body {
         padding: 20px 12px 28px;

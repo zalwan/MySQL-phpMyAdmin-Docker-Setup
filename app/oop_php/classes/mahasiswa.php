@@ -25,5 +25,17 @@ class Mahasiswa {
         $stmt->execute([$nim]);
         return $stmt->fetch(PDO::FETCH_ASSOC);
     }
+
+    public function update($nim, $nama, $alamat, $kota) {
+        $stmt = $this->conn->prepare(
+            "UPDATE $this->table SET nama = ?, alamat = ?, kota = ? WHERE nim = ?"
+        );
+        return $stmt->execute([$nama, $alamat, $kota, $nim]);
+    }
+
+    public function delete($nim) {
+        $stmt = $this->conn->prepare("DELETE FROM $this->table WHERE nim = ?");
+        return $stmt->execute([$nim]);
+    }
 }
 ?>
