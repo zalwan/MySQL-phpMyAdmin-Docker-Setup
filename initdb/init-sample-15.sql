@@ -68,8 +68,6 @@ CREATE TABLE kelola_penerbit (
    NO 2. TRIGGER INSERT & UPDATE
    =============================== */
 
-DELIMITER $$
-
 CREATE TRIGGER trg_insert_penerbit
 AFTER INSERT ON penerbit
 FOR EACH ROW
@@ -77,7 +75,7 @@ BEGIN
     INSERT INTO kelola_penerbit
     (idbuku, idpetugas, idpenerbit, jnskelola, waktu, tanggal)
     VALUES (NULL, NULL, NEW.idpenerbit, 'INSERT', CURTIME(), CURDATE());
-END$$
+END;
 
 CREATE TRIGGER trg_update_penerbit
 AFTER UPDATE ON penerbit
@@ -86,9 +84,7 @@ BEGIN
     INSERT INTO kelola_penerbit
     (idbuku, idpetugas, idpenerbit, jnskelola, waktu, tanggal)
     VALUES (NULL, NULL, NEW.idpenerbit, 'UPDATE', CURTIME(), CURDATE());
-END$$
-
-DELIMITER ;
+END;
 
 /* ===============================
    NO 3. INSERT 5 DATA PENERBIT
